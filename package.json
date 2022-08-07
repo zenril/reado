@@ -1,6 +1,6 @@
 {
     "scripts": {
-        "server": "node server/app.js",
+        "start": "node src/app.js",
         "prepare": "husky install",
         "format": "prettier --write ."
     },

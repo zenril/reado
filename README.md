@@ -2,7 +2,7 @@
 nvm use
 yarn
 yarn prepare
-yarn server
+yarn start
 ```
 
 ### To start a story downloading:
@@ -25,9 +25,9 @@ This means it will close off the html file with `</body></html>` if its finished
 
 ## Todo
 
+-   make `pause` and `done` use the same process, I should be able to start a finished story downloading new chapters. Should always be able to read the html file. maybe I just save the index.html as a fragment and serve the fragment in a layout compiled by the server.
 -   split sets of chapters into their own files.
 -   make it good
--   make `pause` and `done` use the same process, I should be able to start a finished story downloading new chapters.
 -   move puppeteer get into the kitchen sink file
 -   make sure it can download multiple stories at the same time.
 -   remove the `JOB` const and just store the status in the json file.
