@@ -73,7 +73,6 @@ const startJob = async (url, cb = (jobID, title) => {}) => {
 };
 
 const nextPageJob = async (jobID, dir, title = '', url = '', count = 0) => {
-    console.log(`${count} - ${url} - ${jobID}`);
     //if the job has been finished we stop it and we need to clean up the file;
     if (JOBS[jobID] === 'done') {
         closefile(`${dir}/index.html`);
@@ -82,7 +81,7 @@ const nextPageJob = async (jobID, dir, title = '', url = '', count = 0) => {
     }
 
     if (JOBS[jobID] === 'pause') {
-        console.log('job finished');
+        console.log('job paused');
         return;
     }
 
@@ -99,6 +98,8 @@ const nextPageJob = async (jobID, dir, title = '', url = '', count = 0) => {
     nextPage
         .then((page) => {
             if (page.extractedHrefs.next) {
+                count++;
+                console.log(`${count} - ${url} - ${jobID}`);
                 //add the new content to the html
                 updatefile(`${dir}/index.html`, page.extractedContents.html);
                 //update the data file with things like the new next page

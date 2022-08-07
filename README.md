@@ -1,6 +1,7 @@
 ```
 nvm use
 yarn
+yarn prepare
 yarn server
 ```
 
