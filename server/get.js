@@ -1,52 +1,48 @@
-const puppeteer = require("puppeteer-extra");
-const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 
 puppeteer.use(StealthPlugin());
 
-exports.puppeteer = () => {
-    const browser = puppeteer.launch({
+exports.get = async (url, contentMap = {}, linkMap = {}) => {
+    const browser = await puppeteer.launch({
         headless: true,
-        args: ["--no-sandbox"],
+        args: ['--no-sandbox'],
     });
 
-    return async (url, contentMap = {}, linkMap = {}) => {
-        const pages = await browser.pages();
-        const page = pages[0];
+    const pages = await browser.pages();
+    const page = pages[0];
 
-        await page.goto(url, { waitUntil: "networkidle2" });
+    await page.goto(url, { waitUntil: 'networkidle2' });
 
-        const html = await page.evaluate(
-            (linkMap, contentMap) => {
-                let extractedHrefs = {};
-                let extractedContents = {};
+    const html = await page.evaluate(
+        (linkMap, contentMap) => {
+            let extractedHrefs = {};
+            let extractedContents = {};
 
-                let linkKeys = Object.keys(linkMap);
-                for (const key of linkKeys) {
-                    extractedHrefs[key] = document.querySelector(
-                        linkMap[key]
-                    ).href;
-                }
+            let linkKeys = Object.keys(linkMap);
+            for (const key of linkKeys) {
+                extractedHrefs[key] = document.querySelector(linkMap[key]).href;
+            }
 
-                let contentKeys = Object.keys(contentMap);
-                for (const key of contentKeys) {
-                    let content = document
-                        .querySelector(contentMap[key])
-                        .outerHTML.replace(/style="[^"]*"/g, "")
-                        .replace(/<br>|<br\/>/g, "");
-                    extractedContents[key] = content;
-                }
+            let contentKeys = Object.keys(contentMap);
+            for (const key of contentKeys) {
+                let content = document
+                    .querySelector(contentMap[key])
+                    .outerHTML.replace(/style="[^"]*"/g, '')
+                    .replace(/<br>|<br\/>/g, '');
+                extractedContents[key] = content;
+            }
 
-                return {
-                    extractedContents,
-                    extractedHrefs,
-                };
-            },
-            linkMap,
-            contentMap
-        );
+            return {
+                extractedContents,
+                extractedHrefs,
+            };
+        },
+        linkMap,
+        contentMap
+    );
 
-        await page.close();
-        await browser.close();
-        return html;
-    };
+    await page.close();
+    await browser.close();
+    return html;
 };
