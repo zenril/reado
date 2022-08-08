@@ -4,11 +4,11 @@ exports.updatefile = (file, content) => {
     fs.appendFileSync(file, content);
 };
 
-exports.closefile = (file) => {
-    fs.appendFileSync(file, '</article></body></html>');
+exports.readConfig = (file) => {
+    return JSON.parse(fs.readFileSync(file, { encoding: 'utf8', flag: 'r' }));
 };
 
-exports.updateJsonFile = (file, newConfig) => {
+exports.updateConfig = (file, newConfig) => {
     fs.writeFileSync(
         file,
         JSON.stringify({
@@ -54,6 +54,26 @@ exports.writeTemplate = (file, title) => {
                 </head>
                 <article>
                     <h1>${title}</h1>
+                </article>
+            </body>
+        </html>`
+    );
+};
+
+exports.addChapterTofile = (file, content) => {
+    let buffer = fs.readFileSync(file, { encoding: 'utf8', flag: 'r' });
+    //remove the closing tags
+    buffer = buffer.replace(/<\/article>|<\/body>|<\/html>/g, '');
+    //add the new chapter
+    fs.writeFileSync(
+        file,
         `
+    ${buffer}
+    <!-- chapter start -->
+    ${content}
+    <!-- chapter end -->
+        </article>
+    </body>
+</html>`
     );
 };

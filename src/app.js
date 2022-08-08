@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const { get } = require('./get');
-const { updatefile, closefile, updateJsonFile, writeTemplate } = require('./kitchensink');
+const { addChapterTofile, updateConfig, readConfig, writeTemplate } = require('./kitchensink');
 
 const app = express();
 
@@ -12,7 +12,7 @@ const port = 3000;
 const JOBS = {};
 const baseDir = './stories';
 
-const startJob = async (url, cb = (jobID, title) => {}) => {
+const storyStartPage = async (url) => {
     let page = await get(
         url,
         //get content from the page
@@ -28,37 +28,42 @@ const startJob = async (url, cb = (jobID, title) => {}) => {
     );
 
     //strip html from title
-    let cleanTitle = page.extractedContents.title
+    let title = page.extractedContents.title
         .replace(/<[^>]*>/g, '')
         .replace(/\s+/g, ' ')
         .trim();
-    //create a decent name for the directory and the jobid
-    let jobID = cleanTitle.replace(/\s+/g, '_').toLowerCase();
-    let dir = `${baseDir}/${jobID}`;
+    //create a decent name for the directory and the id
+    let id = title.replace(/\s+/g, '_').toLowerCase();
+
+    return { page, id, title };
+};
+
+const startJob = async (url, cb = (id, title) => {}) => {
+    const { page, id, title } = await storyStartPage(url);
+    let dir = `${baseDir}/${id}`;
+
     //construct the config that will be saved to the json file.
     let config = {
-        id: jobID,
-        title: cleanTitle,
+        id,
+        title,
         rating: page.extractedContents.rating,
         description: page.extractedContents.description,
         url: url,
         next: page.extractedHrefs.start,
         chapters: 0,
+        status: 'stopped',
     };
-
-    //set the job status as running
-    JOBS[jobID] = 'running';
 
     //create directory
     if (!fs.existsSync(dir)) {
         console.log(`making new directory ${dir}`);
         fs.mkdirSync(dir);
         fs.writeFileSync(`${dir}/data.json`, JSON.stringify(config));
-        writeTemplate(`${dir}/index.html`, cleanTitle);
+        writeTemplate(`${dir}/index.html`, title);
     } else {
         try {
             console.log(`reading in config for ${dir}`);
-            let fetched = JSON.parse(fs.readFileSync(`${dir}/data.json`));
+            let fetched = JSON.parse(fs.readFileSync(`${dir}/data.json`, { encoding: 'utf8', flag: 'r' }));
 
             if (fetched.next) {
                 config = fetched;
@@ -68,54 +73,37 @@ const startJob = async (url, cb = (jobID, title) => {}) => {
         }
     }
 
-    cb(jobID, cleanTitle);
-    nextPageJob(jobID, dir, cleanTitle, config.next, config.chapters);
+    updateConfig(`${dir}/data.json`, { status: 'running' });
+
+    cb(id, title);
+    nextPageJob(id, dir, title, config.next, config.chapters);
 };
 
-const nextPageJob = async (jobID, dir, title = '', url = '', count = 0) => {
-    //if the job has been finished we stop it and we need to clean up the file;
-    if (JOBS[jobID] === 'done') {
-        closefile(`${dir}/index.html`);
-        console.log('job finished');
-        return;
-    }
-
-    if (JOBS[jobID] === 'pause') {
-        console.log('job paused');
-        return;
-    }
-
-    if (JOBS[jobID] === 'error') {
-        console.log('job finished');
-        return;
-    }
-
+const nextPageJob = async (id, dir, title = '', url = '', count = 0) => {
     const nextPage = new Promise(async (resolve, reject) => {
-        JOBS[jobID] = 'running ' + count;
-        resolve(await get(url, { html: '#chr-content' }, { next: '#next_chap', prev: '#prev_chap' }));
+        //read in the config file
+        let config = JSON.parse(fs.readFileSync(`${dir}/data.json`, { encoding: 'utf8', flag: 'r' }));
+
+        if (config.status === 'stopped') {
+            reject('job stopped');
+        }
+
+        let page = await get(url, { html: '#chr-content' }, { next: '#next_chap', prev: '#prev_chap' });
+        console.log(`${count} - ${url} - ${id}`);
+        //add the new content to the html
+        addChapterTofile(`${dir}/index.html`, page.extractedContents.html);
+        //update the data file with things like the new next page
+        updateConfig(`${dir}/data.json`, { next: page.extractedHrefs.next, chapters: count });
+
+        resolve(page.extractedHrefs.next);
     });
 
     nextPage
-        .then((page) => {
-            if (page.extractedHrefs.next) {
-                count++;
-                console.log(`${count} - ${url} - ${jobID}`);
-                //add the new content to the html
-                updatefile(`${dir}/index.html`, page.extractedContents.html);
-                //update the data file with things like the new next page
-                updateJsonFile(`${dir}/data.json`, { next: page.extractedHrefs.next, chapters: count });
-                //recurse
-                nextPageJob(jobID, dir, title, page.extractedHrefs.next, ++count);
-            } else {
-                JOBS[jobID] = 'done';
-                //go to next cycle to clean up the task
-                nextPageJob(jobID, dir);
-            }
+        .then((next) => {
+            nextPageJob(id, dir, title, next, ++count);
         })
         .catch((err) => {
-            JOBS[jobID] = 'error';
-            //go to next cycle to clean up the task
-            nextPageJob(jobID, dir);
+            console.log(err);
         });
 };
 
@@ -129,14 +117,20 @@ app.get('/fetch', cors(), async function (req, res, next) {
 });
 
 app.get('/start', cors(), async function (req, res, next) {
-    await startJob(req.query.url, (jobId, title) => {
-        res.send('started jobID: ' + jobId + ', title: ' + title);
+    await startJob(req.query.url, (id, title) => {
+        res.send('started id: ' + id + ', title: ' + title);
     });
 });
 
-app.get('/status/:id/:status', cors(), async function (req, res, next) {
-    JOBS[req.params.id] = req.params.status;
-    res.send('stopped jobID: ' + req.params.id + ', status: ' + req.params.status);
+app.get('/stop', cors(), async function (req, res, next) {
+    try {
+        const { page, id, title } = await storyStartPage(req.query.url);
+        let dir = `${baseDir}/${id}`;
+        updateConfig(`${dir}/data.json`, { status: 'stopped' });
+        res.send('stopped id: ' + id + ', title: ' + title);
+    } catch (error) {
+        res.send('something went wrong reading the data file');
+    }
 });
 
 app.listen(port, () => {
