@@ -10,7 +10,11 @@ app.use(cors());
 
 const port = 3000;
 const JOBS = {};
-const baseDir = './stories';
+const baseDir = './.books';
+
+if (!fs.existsSync(baseDir)) {
+    fs.mkdirSync(baseDir);
+}
 
 const storyStartPage = async (url) => {
     let page = await get(
@@ -33,7 +37,7 @@ const storyStartPage = async (url) => {
         .replace(/\s+/g, ' ')
         .trim();
     //create a decent name for the directory and the id
-    let id = title.replace(/\s+/g, '_').toLowerCase();
+    let id = title.replace(/[^a-z]+/gi, '_').toLowerCase();
 
     return { page, id, title };
 };
@@ -62,14 +66,14 @@ const startJob = async (url, cb = (id, title) => {}) => {
         writeTemplate(`${dir}/index.html`, title);
     } else {
         try {
-            console.log(`reading in config for ${dir}`);
+            console.log(`Reading in config for ${dir}`);
             let fetched = JSON.parse(fs.readFileSync(`${dir}/data.json`, { encoding: 'utf8', flag: 'r' }));
 
             if (fetched.next) {
                 config = fetched;
             }
         } catch (error) {
-            console.log('something went wrong reading the data file');
+            console.log('Something went wrong reading the data file');
         }
     }
 
@@ -82,16 +86,17 @@ const startJob = async (url, cb = (id, title) => {}) => {
 const nextPageJob = async (id, dir, title = '', url = '', count = 0) => {
     const nextPage = new Promise(async (resolve, reject) => {
         //read in the config file
-        let config = JSON.parse(fs.readFileSync(`${dir}/data.json`, { encoding: 'utf8', flag: 'r' }));
+        let config = readConfig(`${dir}/data.json`);
 
         if (config.status === 'stopped') {
-            reject('job stopped');
+            return reject('job stopped');
         }
 
         let page = await get(url, { html: '#chr-content' }, { next: '#next_chap', prev: '#prev_chap' });
-        console.log(`${count} - ${url} - ${id}`);
+        count = count + 1;
+        console.log(`${count} - ${id}`);
         //add the new content to the html
-        addChapterTofile(`${dir}/index.html`, page.extractedContents.html);
+        addChapterTofile(`${dir}/index.html`, title, page.extractedContents.html);
         //update the data file with things like the new next page
         updateConfig(`${dir}/data.json`, { next: page.extractedHrefs.next, chapters: count });
 
@@ -100,7 +105,7 @@ const nextPageJob = async (id, dir, title = '', url = '', count = 0) => {
 
     nextPage
         .then((next) => {
-            nextPageJob(id, dir, title, next, ++count);
+            nextPageJob(id, dir, title, next, count);
         })
         .catch((err) => {
             console.log(err);
