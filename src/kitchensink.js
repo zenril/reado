@@ -59,11 +59,8 @@ exports.writeTemplate = (file, title) => {
 
 exports.addChapterTofile = (file, bookTitle, newChapter) => {
     let readIn = fs.readFileSync(file, { encoding: 'utf8', flag: 'r' });
-    //remove the closing tags
-    readIn = readIn.replace(/\n*\s*(<\/article>|<\/body>|<\/html>)/g, '');
     //only keep the substring between <!--start--> and <!--end-->
     readIn = readIn.substring(readIn.indexOf('<!--start-->') + 12, readIn.indexOf('<!--end-->')).trim();
-
     //add the new chapter
     fs.writeFileSync(file, template(bookTitle, readIn, newChapter));
 };
